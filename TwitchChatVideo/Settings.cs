@@ -30,6 +30,7 @@ namespace TwitchChatVideo
                 LineSpacing = 4,
                 VodChat = false,
                 ShowBadges = true,
+                RenderMov = false,
             };
         }
 
@@ -44,6 +45,7 @@ namespace TwitchChatVideo
             LineSpacing = vm.LineSpacing;
             ShowBadges = vm.ShowBadges;
             VodChat = vm.VodChat;
+            RenderMov = vm.RenderMov;
         }
 
         public static void Save(ViewModel vm)
@@ -66,6 +68,7 @@ namespace TwitchChatVideo
         public float LineSpacing { get; set; }
         public bool ShowBadges { get; set; }
         public bool VodChat { get; set; }
+        public bool RenderMov { get; set; }
     }
 }
 

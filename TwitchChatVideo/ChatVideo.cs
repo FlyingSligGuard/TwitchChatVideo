@@ -21,7 +21,10 @@ namespace TwitchChatVideo
         public const int VerticalPad = 5;
 
         public const int FPS = 24;
-        public const VideoCodec Codec = VideoCodec.H264;
+        public const VideoCodec QtRle = VideoCodec.QtRle;
+        public const VideoCodec H264 = VideoCodec.H264;
+        public const AVPixelFormat MovPF = AVPixelFormat.FormatArgb32bpp;
+        public const AVPixelFormat Mp4PF = AVPixelFormat.FormatYuv420P;
 
         public string ID { get; set; }
         public Color BGColor { get; internal set; }
@@ -32,6 +35,7 @@ namespace TwitchChatVideo
         public bool VodChat { get; internal set; }
         public float LineSpacing { get; internal set; }
         public bool ShowBadges { get; internal set; }
+        public bool RenderMov { get; internal set; }
 
         public ChatVideo(ViewModel vm)
         {
@@ -44,6 +48,7 @@ namespace TwitchChatVideo
             Font = new Font(vm.FontFamily.ToString(), vm.FontSize);
             VodChat = vm.VodChat;
             ShowBadges = vm.ShowBadges;
+            RenderMov = vm.RenderMov;
         }
 
         public void Dispose()
@@ -88,7 +93,16 @@ namespace TwitchChatVideo
 
                         var max = (int)(FPS * video.Duration);
 
-                        var path = string.Format("{0}{1}-{2}.mp4", OutputDirectory, video.Streamer, video.ID);
+                        var path = "";
+                        switch(RenderMov)
+                        {
+                            case false:
+                                path = string.Format("{0}{1}-{2}.mp4", OutputDirectory, video.Streamer, video.ID);
+                                break;
+                            case true:
+                                path = string.Format("{0}{1}-{2}.mov", OutputDirectory, video.Streamer, video.ID);
+                                break;
+                        };
                         var result = await WriteVideoFrames(path, drawables, 0, max, progress, ct);
                         progress?.Report(new VideoProgress(1, 1, VideoProgress.VideoStatus.CleaningUp));
                         drawables.ForEach(d => d.Lines.ForEach(l => l.Drawables.ForEach(dr => dr.Dispose())));
@@ -117,9 +131,26 @@ namespace TwitchChatVideo
             {
                 using (var writer = new VideoFileWriter())
                 {
-                    using (var bmp = new Bitmap(Width, Height))
+                    using (var bmp = new Bitmap(Width, Height, System.Drawing.Imaging.PixelFormat.Format32bppArgb))
                     {
-                        writer.Open(path, Width, Height, FPS, Codec);
+                        writer.Width = Width;
+                        writer.Height = Height;
+                        writer.FrameRate = FPS;
+
+                        switch (RenderMov)
+                        {
+                            case false:
+                                writer.VideoCodec = H264;
+                                writer.PixelFormat = Mp4PF;
+                                writer.VideoOptions["profile"] = "baseline";
+                                writer.VideoOptions["level"] = "3.0";
+                                break;
+                            case true:
+                                writer.VideoCodec = QtRle;
+                                writer.PixelFormat = MovPF;
+                                break;
+                        }
+                        writer.Open(path);
                         var bounds = new Rectangle(0, 0, Width, Height);
 
                         for (int i = start_frame; i <= end_frame; i++)
