@@ -1,5 +1,4 @@
-﻿using Accord.Video.FFMPEG;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
@@ -21,7 +20,6 @@ namespace TwitchChatVideo
         public const int VerticalPad = 5;
 
         public const int FPS = 24;
-        public const VideoCodec Codec = VideoCodec.H264;
 
         public string ID { get; set; }
         public Color BGColor { get; internal set; }
@@ -115,18 +113,15 @@ namespace TwitchChatVideo
 
             return await Task.Run(() =>
             {
-                using (var writer = new VideoFileWriter())
-                {
-                    using (var bmp = new Bitmap(Width, Height))
+                using (var bmp = new Bitmap(Width, Height, System.Drawing.Imaging.PixelFormat.Format32bppArgb))
                     {
-                        writer.Open(path, Width, Height, FPS, Codec);
                         var bounds = new Rectangle(0, 0, Width, Height);
 
                         for (int i = start_frame; i <= end_frame; i++)
                         {
                             if (ct.IsCancellationRequested)
                             {
-                                progress?.Report(new VideoProgress(0, 1, VideoProgress.VideoStatus.Idle));
+                            progress?.Report(new VideoProgress(0, 1, VideoProgress.VideoStatus.Idle));
                                 return false;
                             }
 
@@ -150,13 +145,12 @@ namespace TwitchChatVideo
                             }
 
                             DrawFrame(bmp, drawable_messages, i);
-                            writer.WriteVideoFrame(bmp);
+                        bmp.Save(string.Format("{0}{1}_{2}.png", OutputDirectory,"image",i), System.Drawing.Imaging.ImageFormat.Png);
                         }
 
 
                         return true;
                     }
-                }
             });
 
 
