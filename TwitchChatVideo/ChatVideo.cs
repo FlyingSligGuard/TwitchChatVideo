@@ -1,6 +1,6 @@
-﻿using Accord.Video.FFMPEG;
-using System;
+﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Linq;
@@ -15,13 +15,13 @@ namespace TwitchChatVideo
     {
         public const string OutputDirectory = "./output/";
         public const string LogDirectory = "./logs/";
+        public const string FFmpegDirectory = "./ffmpeg/";
         public const int EmotePad = 3;
         public const int BadgePad = 3;
         public const int HorizontalPad = 5;
         public const int VerticalPad = 5;
 
         public const int FPS = 24;
-        public const VideoCodec Codec = VideoCodec.H264;
 
         public string ID { get; set; }
         public Color BGColor { get; internal set; }
@@ -32,6 +32,10 @@ namespace TwitchChatVideo
         public bool VodChat { get; internal set; }
         public float LineSpacing { get; internal set; }
         public bool ShowBadges { get; internal set; }
+        public bool RenderMov { get; internal set; }
+        public string FileExt { get; internal set; }
+        public string Codec { get; internal set; }
+
 
         public ChatVideo(ViewModel vm)
         {
@@ -39,11 +43,23 @@ namespace TwitchChatVideo
             LineSpacing = vm.LineSpacing;
             BGColor = Color.FromArgb(vm.BGColor.A, vm.BGColor.R, vm.BGColor.G, vm.BGColor.B);
             ChatColor = Color.FromArgb(vm.ChatColor.A, vm.ChatColor.R, vm.ChatColor.G, vm.ChatColor.B);
-            Width = (int) vm.Width;
+            Width = (int)vm.Width;
             Height = (int)vm.Height;
             Font = new Font(vm.FontFamily.ToString(), vm.FontSize);
             VodChat = vm.VodChat;
             ShowBadges = vm.ShowBadges;
+            RenderMov = vm.RenderMov;
+            switch (RenderMov)
+            {
+                case false:
+                    FileExt = "mp4";
+                    Codec = "h264";
+                    break;
+                case true:
+                    FileExt = "mov";
+                    Codec = "qtrle";
+                    break;
+            }
         }
 
         public void Dispose()
@@ -68,7 +84,7 @@ namespace TwitchChatVideo
                 var ffz = await FFZ.CreateAsync(video.Streamer, progress, ct);
                 var messages = await TwitchDownloader.GetChatAsync(ID, video.Duration, progress, ct);
 
-                if(ct.IsCancellationRequested)
+                if (ct.IsCancellationRequested)
                 {
                     return false;
                 }
@@ -88,11 +104,11 @@ namespace TwitchChatVideo
 
                         var max = (int)(FPS * video.Duration);
 
-                        var path = string.Format("{0}{1}-{2}.mp4", OutputDirectory, video.Streamer, video.ID);
+                        var path = string.Format("{0}{1}-{2}.{3}", OutputDirectory, video.Streamer, video.ID, FileExt);
                         var result = await WriteVideoFrames(path, drawables, 0, max, progress, ct);
                         progress?.Report(new VideoProgress(1, 1, VideoProgress.VideoStatus.CleaningUp));
                         drawables.ForEach(d => d.Lines.ForEach(l => l.Drawables.ForEach(dr => dr.Dispose())));
-                    
+
                         return result;
                     }
                     catch (Exception e)
@@ -108,6 +124,7 @@ namespace TwitchChatVideo
             });
         }
 
+
         public async Task<bool> WriteVideoFrames(string path, List<DrawableMessage> lines, int start_frame, int end_frame, IProgress<VideoProgress> progress = null, CancellationToken ct = default(CancellationToken))
         {
             var drawable_messages = new Stack<DrawableMessage>();
@@ -115,47 +132,64 @@ namespace TwitchChatVideo
 
             return await Task.Run(() =>
             {
-                using (var writer = new VideoFileWriter())
+                using (var bmp = new Bitmap(Width, Height, System.Drawing.Imaging.PixelFormat.Format32bppArgb))
                 {
-                    using (var bmp = new Bitmap(Width, Height))
+                    var bounds = new Rectangle(0, 0, Width, Height);
+
+                    var ffmpeg = new Process
                     {
-                        writer.Open(path, Width, Height, FPS, Codec);
-                        var bounds = new Rectangle(0, 0, Width, Height);
-
-                        for (int i = start_frame; i <= end_frame; i++)
+                        StartInfo =
                         {
-                            if (ct.IsCancellationRequested)
-                            {
-                                progress?.Report(new VideoProgress(0, 1, VideoProgress.VideoStatus.Idle));
-                                return false;
-                            }
+                            FileName = FFmpegDirectory + "ffmpeg.exe",
+                            Arguments = string.Format("-framerate {0} -f image2pipe -i - -vcodec {1} -y {2}", FPS, Codec, path),
+                            UseShellExecute = false,
+                            CreateNoWindow = false,
+                            RedirectStandardInput = true
+                           }
+                    };
+                    ffmpeg.Start();
 
-                            progress?.Report(new VideoProgress(i, end_frame, VideoProgress.VideoStatus.Rendering));
-
-                            if (last_chat < lines.Count)
-                            {
-                                // Note that this intentionally pulls at most one chat per frame
-                                var chat = lines.ElementAt(last_chat);
-                                if (!chat.Live && !VodChat)
-                                {
-                                    last_chat++;
-
-                                }
-                                else if (chat.StartFrame < i)
-                                {
-                                    drawable_messages.Push(chat);
-                                    last_chat++;
-                                }
-
-                            }
-
-                            DrawFrame(bmp, drawable_messages, i);
-                            writer.WriteVideoFrame(bmp);
+                    for (int i = start_frame; i <= end_frame; i++)
+                    {
+                        if (ct.IsCancellationRequested)
+                        {
+                            ffmpeg.StandardInput.Flush();
+                            ffmpeg.StandardInput.Close();
+                            ffmpeg.Close();
+                            progress?.Report(new VideoProgress(0, 1, VideoProgress.VideoStatus.Idle));
+                            return false;
                         }
 
+                        progress?.Report(new VideoProgress(i, end_frame, VideoProgress.VideoStatus.Rendering));
 
-                        return true;
+                        if (last_chat < lines.Count)
+                        {
+                            // Note that this intentionally pulls at most one chat per frame
+                            var chat = lines.ElementAt(last_chat);
+                            if (!chat.Live && !VodChat)
+                            {
+                                last_chat++;
+
+                            }
+                            else if (chat.StartFrame < i)
+                            {
+                                drawable_messages.Push(chat);
+                                last_chat++;
+                            }
+                        }
+
+                        DrawFrame(bmp, drawable_messages, i);
+                        bmp.Save(ffmpeg.StandardInput.BaseStream, System.Drawing.Imaging.ImageFormat.Png);
+
+                        if (i == end_frame) 
+                        {
+                            ffmpeg.StandardInput.Flush();
+                            ffmpeg.StandardInput.Close();
+                            ffmpeg.Close();
+                        }
                     }
+
+                    return true;
                 }
             });
 
@@ -186,7 +220,8 @@ namespace TwitchChatVideo
 
             double height = 0;
 
-            var messages = lines.TakeWhile(x => {
+            var messages = lines.TakeWhile(x =>
+            {
                 var passes = height < (Height - VerticalPad * 2);
                 height += x.Lines.LastOrDefault().Height + LineSpacing;
                 return passes;

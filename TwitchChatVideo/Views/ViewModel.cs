@@ -28,6 +28,7 @@ namespace TwitchChatVideo
         private Color chat_color;
         private bool show_badges;
         private bool vod_chat;
+        private bool render_mov;
         private float spacing;
         private bool running;
         private long total;
@@ -51,6 +52,7 @@ namespace TwitchChatVideo
         public Color ChatColor { get => chat_color; set => Set(ref chat_color, value); }
         public bool ShowBadges { get => show_badges; set => Set(ref show_badges, value); }
         public bool VodChat { get => vod_chat; set => Set(ref vod_chat, value); }
+        public bool RenderMov { get => render_mov; set => Set(ref render_mov, value); }
         public float LineSpacing { get => spacing; set => Set(ref spacing, value); }
         public bool Running { get => running; set => Set(ref running, value); }
         public Visibility UpdateVisibility { get => update_available; set => Set(ref update_available, value); }
@@ -116,6 +118,7 @@ namespace TwitchChatVideo
             ChatColor = settings.ChatColor;
             ShowBadges = settings.ShowBadges;
             VodChat = settings.VodChat;
+            RenderMov = settings.RenderMov;
 
             Total = 1;
             Progress = 0;

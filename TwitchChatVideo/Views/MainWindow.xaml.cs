@@ -1,4 +1,5 @@
 ﻿using System.Windows;
+using System.Diagnostics;
 using System.IO;
 using System.Net;
 using Newtonsoft.Json.Linq;
@@ -26,9 +27,16 @@ namespace TwitchChatVideo
             Directory.CreateDirectory(BTTV.BaseDir);
             Directory.CreateDirectory(ChatVideo.OutputDirectory);
             Directory.CreateDirectory(ChatVideo.LogDirectory);
+            Directory.CreateDirectory(ChatVideo.FFmpegDirectory);
             if(Directory.Exists(Updater.OldVersion))
             {
                 Directory.Delete(Updater.OldVersion, true);
+            }
+            if(!File.Exists("./ffmpeg/ffmpeg.exe"))
+            {
+                MessageBox.Show("FFmpeg executable not found. Please download and extract ffmpeg.exe into the ffmpeg folder.\nA browser window will open and lead you directly to the download page when you close this notice.");
+                Process.Start("https://ffmpeg.zeranoe.com/builds/");
+                Application.Current.Shutdown();
             }
         }
     }
