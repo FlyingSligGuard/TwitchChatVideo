@@ -143,7 +143,7 @@ namespace TwitchChatVideo
                             FileName = FFmpegDirectory + "ffmpeg.exe",
                             Arguments = string.Format("-framerate {0} -f image2pipe -i - -vcodec {1} -y {2}", FPS, Codec, path),
                             UseShellExecute = false,
-                            CreateNoWindow = false,
+                            CreateNoWindow = true,
                             RedirectStandardInput = true
                            }
                     };
